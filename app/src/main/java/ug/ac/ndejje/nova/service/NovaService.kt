@@ -56,7 +56,15 @@ class NovaService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_SERVICE) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         return START_STICKY
+    }
+
+    companion object {
+        const val ACTION_STOP_SERVICE = "STOP_NOVA_SERVICE"
     }
 
     private fun setupFloatingOverlay() {

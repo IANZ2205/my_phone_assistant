@@ -1,5 +1,7 @@
 package ug.ac.ndejje.nova.ui.main
 
+import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -51,6 +53,23 @@ class NovaViewModel @Inject constructor(
 
     fun stopListening() {
         speechService.stopListening()
+    }
+
+    fun killEverything(context: android.content.Context) {
+        // Stop speech and voice services
+        speechService.destroy() // Use destroy() instead of stopListening() to release resources
+        voiceService.shutdown()
+
+        // Stop the foreground service
+        val intent = Intent(context, ug.ac.ndejje.nova.service.NovaService::class.java).apply {
+            action = ug.ac.ndejje.nova.service.NovaService.ACTION_STOP_SERVICE
+        }
+        context.startService(intent)
+        
+        // Add a system message about the kill switch
+        _uiState.value = _uiState.value.copy(
+            messages = _uiState.value.messages + ChatMessage("EMERGENCY KILL SWITCH ACTIVATED. All systems offline.", false)
+        )
     }
 
     override fun onCleared() {

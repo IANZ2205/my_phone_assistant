@@ -2,7 +2,11 @@ package ug.ac.ndejje.nova.service
 
 import android.content.Context
 import android.content.Intent
+import android.os.BatteryManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -100,10 +104,36 @@ class SpeechService @Inject constructor(
         speechRecognizer.startListening(intent)
     }
 
+    private val handler = Handler(Looper.getMainLooper())
+    private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+
     private fun restartListening() {
         if (!isWakeWordMode) return
-        val intent = createRecognizerIntent()
-        speechRecognizer.startListening(intent)
+
+        val delay = when {
+            isCharging() -> 100L // Fast restart if charging
+            !powerManager.isInteractive -> 3000L // Screen off: wait 3 seconds
+            powerManager.isPowerSaveMode -> 5000L // Power save: wait 5 seconds
+            else -> 1000L // Normal: wait 1 second
+        }
+
+        handler.removeCallbacksAndMessages(null)
+        handler.postDelayed({
+            if (isWakeWordMode) {
+                try {
+                    val intent = createRecognizerIntent()
+                    speechRecognizer.startListening(intent)
+                } catch (e: Exception) {
+                    handler.postDelayed({ restartListening() }, 5000)
+                }
+            }
+        }, delay)
+    }
+
+    private fun isCharging(): Boolean {
+        val intent = context.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        return status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
     }
 
     private fun createRecognizerIntent(): Intent {
@@ -116,11 +146,14 @@ class SpeechService @Inject constructor(
 
     fun stopListening() {
         isWakeWordMode = false
+        handler.removeCallbacksAndMessages(null)
         speechRecognizer.stopListening()
         _isListening.value = false
     }
 
     fun destroy() {
+        isWakeWordMode = false
+        handler.removeCallbacksAndMessages(null)
         speechRecognizer.destroy()
     }
 }
